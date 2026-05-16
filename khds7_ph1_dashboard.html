@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KHDS7 Phase 1 — Survey Progress Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<style>
+  :root {
+    --blue-dark: #1b3a5c;
+    --blue-mid: #2c6faa;
+    --blue-light: #4a9fd8;
+    --green-dark: #2d7d46;
+    --green-mid: #4caf50;
+    --green-light: #81c784;
+    --orange: #e8913a;
+    --red: #d64545;
+    --yellow: #e8c840;
+    --grey: #8a8a8a;
+    --grey-light: #f4f6f8;
+    --grey-border: #dde2e8;
+    --text: #2c3e50;
+    --text-light: #6b7c8d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--grey-light);
+    line-height: 1.5;
+  }
+  .dashboard { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header {
+    background: var(--blue-dark);
+    color: white;
+    padding: 28px 32px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+  }
+  header h1 { font-size: 1.6rem; font-weight: 600; }
+  header .subtitle { color: #a8c4de; font-size: 0.9rem; margin-top: 6px; }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid var(--grey-border);
+  }
+  .card .label { font-size: 0.78rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+  .card .value { font-size: 1.8rem; font-weight: 700; color: var(--blue-dark); margin-top: 4px; }
+  .card .detail { font-size: 0.82rem; color: var(--text-light); margin-top: 2px; }
+  .card.green .value { color: var(--green-dark); }
+  .card.orange .value { color: var(--orange); }
+  .card.red .value { color: var(--red); }
+  .section {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--grey-border);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .section h2 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 18px;
+    color: var(--blue-dark);
+    border-bottom: 2px solid var(--grey-border);
+    padding-bottom: 10px;
+  }
+  .section h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 16px 0 10px 0;
+    color: var(--text);
+  }
+  .section-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 768px) { .section-grid { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--grey-border); }
+  th {
+    background: var(--grey-light);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-light);
+  }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  tr.total-row td { font-weight: 700; border-top: 2px solid var(--blue-mid); }
+  .chart-container { position: relative; max-height: 350px; }
+  .mini-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .mini-card { background: var(--grey-light); border-radius: 6px; padding: 12px 14px; }
+  .mini-card .label { font-size: 0.72rem; color: var(--text-light); text-transform: uppercase; }
+  .mini-card .value { font-size: 1.3rem; font-weight: 700; color: var(--blue-dark); }
+  .note { font-size: 0.8rem; color: var(--text-light); margin-top: 12px; font-style: italic; }
+  .duration-summary { display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+  .duration-summary .stat { text-align: center; }
+  .duration-summary .stat .val { font-size: 1.4rem; font-weight: 700; color: var(--blue-dark); }
+  .duration-summary .stat .lbl { font-size: 0.72rem; color: var(--text-light); text-transform: uppercase; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Champagne bottle progress */
+  .bottle-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .bottle-pct {
+    font-size: 2.6rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--green-dark);
+  }
+  .bottle-count {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-top: 2px;
+  }
+  .bottle-label {
+    font-size: 0.78rem;
+    color: var(--text-light);
+  }
+  .bottle-numbers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 24px;
+    margin-top: 4px;
+  }
+  .bottle-num { text-align: center; }
+  .bottle-num .val { font-size: 1.35rem; font-weight: 700; color: var(--blue-dark); }
+  .bottle-num .lbl { font-size: 0.68rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.3px; }
+  .bottle-num.green .val { color: var(--green-dark); }
+  .bottle-num.grey .val { color: var(--grey); }
+  .bottle-container.complete .bottle-pct { color: #b89a2a; }
+  .bottle-container.complete svg { filter: drop-shadow(0 0 10px rgba(245,215,110,0.4)); }
+</style>
+</head>
+<body>
+<div class="dashboard">
+  <header>
+    <h1>KHDS7 Phase 1 &mdash; Survey Progress Dashboard</h1>
+    <div class="subtitle" id="header-subtitle">Loading...</div>
+  </header>
+
+  <div class="cards" id="key-cards"></div>
+
+  <!-- G2 Interview Progress -->
+  <div class="section">
+    <h2>G2 Interview Progress (alive)</h2>
+    <div class="section-grid">
+      <div class="bottle-container" id="bottleContainer">
+        <svg viewBox="0 0 200 480" width="90" height="216">
+          <defs>
+            <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#1a4a2e"/>
+              <stop offset="30%" stop-color="#2d6b3f"/>
+              <stop offset="60%" stop-color="#1a4a2e"/>
+              <stop offset="100%" stop-color="#0f3020"/>
+            </linearGradient>
+            <linearGradient id="liquidGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#f5d76e" stop-opacity="0.92"/>
+              <stop offset="50%" stop-color="#dbb940"/>
+              <stop offset="100%" stop-color="#c9a832"/>
+            </linearGradient>
+            <linearGradient id="foilGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#b89a2a"/>
+              <stop offset="50%" stop-color="#f0d860"/>
+              <stop offset="100%" stop-color="#b89a2a"/>
+            </linearGradient>
+            <clipPath id="liquidClip">
+              <path d="M 63 205 C 63 188 92 165 94 145 L 106 145 C 108 165 137 188 137 205 L 137 427 Q 137 453 100 456 Q 63 453 63 427 Z"/>
+            </clipPath>
+            <clipPath id="bubbleClip">
+              <rect id="bubbleClipRect" x="58" y="456" width="84" height="0"/>
+            </clipPath>
+          </defs>
+          <!-- Bottle body -->
+          <path d="M 88 140 L 88 30 Q 88 12 95 10 L 105 10 Q 112 12 112 30 L 112 140 C 112 162 142 185 142 200 L 142 430 Q 142 458 100 460 Q 58 458 58 430 L 58 200 C 58 185 88 162 88 140 Z"
+                fill="url(#glassGrad)" stroke="#0a2818" stroke-width="1.5"/>
+          <!-- Liquid fill -->
+          <g clip-path="url(#liquidClip)">
+            <rect id="liquidFill" x="58" y="456" width="84" height="0" fill="url(#liquidGrad)"/>
+          </g>
+          <!-- Bubbles -->
+          <g clip-path="url(#liquidClip)"><g clip-path="url(#bubbleClip)">
+            <circle cx="85" cy="440" r="2.5" fill="rgba(255,255,255,0.6)">
+              <animateTransform attributeName="transform" type="translate" values="0,0;2,-300" dur="4.8s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="0;0.7;0.7;0.4;0" keyTimes="0;0.1;0.7;0.9;1" dur="4.8s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="108" cy="440" r="1.8" fill="rgba(255,255,255,0.5)">
+              <animateTransform attributeName="transform" type="translate" values="0,0;-1,-300" dur="4s" repeatCount="indefinite" begin="0.7s"/>
+              <animate attributeName="opacity" values="0;0.6;0.6;0.3;0" keyTimes="0;0.12;0.7;0.9;1" dur="4s" repeatCount="indefinite" begin="0.7s"/>
+            </circle>
+            <circle cx="95" cy="440" r="1.5" fill="rgba(255,255,255,0.5)">
+              <animateTransform attributeName="transform" type="translate" values="0,0;3,-300" dur="3.6s" repeatCount="indefinite" begin="1.4s"/>
+              <animate attributeName="opacity" values="0;0.6;0.6;0.3;0" keyTimes="0;0.12;0.7;0.9;1" dur="3.6s" repeatCount="indefinite" begin="1.4s"/>
+            </circle>
+            <circle cx="120" cy="440" r="2.8" fill="rgba(255,255,255,0.4)">
+              <animateTransform attributeName="transform" type="translate" values="0,0;-2,-300" dur="5.5s" repeatCount="indefinite" begin="0.3s"/>
+              <animate attributeName="opacity" values="0;0.5;0.5;0.2;0" keyTimes="0;0.08;0.7;0.9;1" dur="5.5s" repeatCount="indefinite" begin="0.3s"/>
+            </circle>
+            <circle cx="78" cy="440" r="2" fill="rgba(255,255,255,0.5)">
+              <animateTransform attributeName="transform" type="translate" values="0,0;1,-300" dur="4.2s" repeatCount="indefinite" begin="2s"/>
+              <animate attributeName="opacity" values="0;0.6;0.6;0.3;0" keyTimes="0;0.12;0.7;0.9;1" dur="4.2s" repeatCount="indefinite" begin="2s"/>
+            </circle>
+            <circle cx="100" cy="440" r="1.5" fill="rgba(255,255,255,0.6)">
+              <animateTransform attributeName="transform" type="translate" values="0,0;-1,-300" dur="3.3s" repeatCount="indefinite" begin="1s"/>
+              <animate attributeName="opacity" values="0;0.7;0.7;0.4;0" keyTimes="0;0.15;0.7;0.9;1" dur="3.3s" repeatCount="indefinite" begin="1s"/>
+            </circle>
+            <circle cx="112" cy="440" r="2.2" fill="rgba(255,255,255,0.4)">
+              <animateTransform attributeName="transform" type="translate" values="0,0;2,-300" dur="5s" repeatCount="indefinite" begin="0.5s"/>
+              <animate attributeName="opacity" values="0;0.5;0.5;0.2;0" keyTimes="0;0.08;0.7;0.9;1" dur="5s" repeatCount="indefinite" begin="0.5s"/>
+            </circle>
+          </g></g>
+          <!-- Glass highlight -->
+          <path d="M 68 210 L 68 420 Q 68 440 78 448" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4" stroke-linecap="round"/>
+          <!-- Foil cap -->
+          <rect x="84" y="4" width="32" height="20" rx="3" fill="url(#foilGrad)" stroke="#9a8520" stroke-width="0.5"/>
+          <line x1="84" y1="14" x2="116" y2="14" stroke="#9a8520" stroke-width="0.5" opacity="0.6"/>
+          <rect x="82" y="22" width="36" height="8" rx="2" fill="url(#foilGrad)" stroke="#9a8520" stroke-width="0.5" opacity="0.85"/>
+        </svg>
+        <div style="text-align:center">
+          <div class="bottle-pct" id="bottlePct"></div>
+          <div class="bottle-count" id="bottleCount"></div>
+          <div class="bottle-label">G2 interviews completed</div>
+        </div>
+        <div class="bottle-numbers" id="bottleNumbers"></div>
+      </div>
+      <div>
+        <h3>Interviewed &mdash; by actual survey location</h3>
+        <table id="tierTableInterviewed"></table>
+        <h3 style="margin-top:20px">Remaining &mdash; by tracking location</h3>
+        <table id="tierTableRemaining"></table>
+      </div>
+    </div>
+    <p class="note" id="deceasedNote"></p>
+  </div>
+
+  <!-- Not Located -->
+  <div class="section">
+    <h2>"Not Located" G2s &mdash; Reference</h2>
+    <p class="note" id="notLocatedNote" style="margin-top:-12px;margin-bottom:16px"></p>
+    <div class="two-col">
+      <div style="min-height:380px">
+        <h3 style="font-size:0.9rem;margin-bottom:10px;color:var(--text-light)">Location in 2010</h3>
+        <div style="position:relative;height:350px">
+          <canvas id="chartNotLocPie"></canvas>
+        </div>
+      </div>
+      <div style="min-height:380px">
+        <h3 style="font-size:0.9rem;margin-bottom:10px;color:var(--text-light)">Last KHDS contact</h3>
+        <div style="position:relative;height:350px">
+          <canvas id="chartLastSeen"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G3 Progress -->
+  <div class="section">
+    <h2>G3 Progress</h2>
+    <p class="note" style="margin-top:-12px;margin-bottom:16px">Target N unknown &mdash; G3s are identified through G2 household interviews</p>
+
+    <!-- Interviewed G3s -->
+    <div id="g3Headline" style="margin-bottom:16px"></div>
+    <table id="g3BreakdownTable" style="max-width:600px;margin-bottom:20px"></table>
+    <h3>Interviewed G3s &mdash; by survey location</h3>
+    <table id="g3LocationTable" style="max-width:600px"></table>
+
+    <!-- Non-resident G3s (chld_fathered) -->
+    <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--grey-border)">
+      <div id="g3NonResident"></div>
+    </div>
+
+    <!-- G3s per G2 parent -->
+    <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--grey-border)">
+      <div id="g3PerG2Summary"></div>
+    </div>
+
+  </div>
+
+  <!-- Interview Duration -->
+  <div class="section">
+    <h2>Interview Duration</h2>
+    <div class="duration-summary" id="durationSummary"></div>
+    <p class="note">Duration from SurveyCTO active editing time (raw data). Based on <span id="durationN"></span> interviews.</p>
+  </div>
+
+</div>
+
+<script src="khds7_ph1_dashboard_data.js"></script>
+<script>
+const D = window.KHDS7;
+const A = D.sectionA;
+const B = D.sectionB;
+const C = D.sectionC;
+const E = D.sectionE;
+
+// -- Header --
+document.getElementById('header-subtitle').textContent =
+  `Phase 1: ${D.meta.phase1Villages} of ${D.meta.totalVillages} baseline villages  |  Survey period: ${A.surveyDateFirst} to ${A.surveyDateLast}  |  ${A.hhInterviews} household interviews  |  Generated: ${D.meta.generated}`;
+
+// -- Key figure cards --
+const aliveG2 = A.aliveNotRefused;
+const pct = (A.interviewed / aliveG2 * 100).toFixed(0);
+const cardsHTML = [
+  {label: 'G2 Targets (alive)', value: aliveG2, detail: `${A.totalG2} total \u2212 ${A.deceased} deceased`},
+  {label: 'G2 Interviewed', value: A.interviewed, detail: `${pct}% of alive targets`, cls: 'green'},
+  {label: 'G2 Remaining', value: A.remaining, detail: 'For tracking stage', cls: 'orange'},
+  {label: 'G2 Refused', value: A.refused, detail: 'From tracking informants', cls: 'red'},
+  {label: 'G3s Interviewed', value: (B.g3CoResident || 0), detail: `${B.g3WithoutG2 || 0} not co-residing with G2`},
+].map(c =>
+  `<div class="card ${c.cls||''}"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="detail">${c.detail}</div></div>`
+).join('');
+document.getElementById('key-cards').innerHTML = cardsHTML;
+
+// -- Champagne bottle fill --
+{
+  const completed = A.interviewed;
+  const alive = A.aliveNotRefused;
+  const pctFloat = alive > 0 ? (completed / alive * 100) : 0;
+  const fillFrac = Math.min(pctFloat / 100, 1);
+
+  // Fillable range: y=145 (top of interior) to y=456 (bottom) = 311 SVG units
+  const FILL_BOT = 456, FILL_RANGE = 311;
+  const targetH = fillFrac * FILL_RANGE;
+  const liquid = document.getElementById('liquidFill');
+  const bClip = document.getElementById('bubbleClipRect');
+
+  // Animate fill on load (ease-out cubic, 1.5 s)
+  let start = null;
+  function animFill(ts) {
+    if (!start) start = ts;
+    const t = Math.min((ts - start) / 1500, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    const h = ease * targetH;
+    const y = FILL_BOT - h;
+    liquid.setAttribute('y', y);
+    liquid.setAttribute('height', h);
+    bClip.setAttribute('y', y);
+    bClip.setAttribute('height', h);
+    if (t < 1) requestAnimationFrame(animFill);
+  }
+  setTimeout(() => requestAnimationFrame(animFill), 300);
+
+  // Text
+  document.getElementById('bottlePct').textContent = pctFloat.toFixed(1) + '%';
+  document.getElementById('bottleCount').textContent =
+    completed.toLocaleString() + ' / ' + alive.toLocaleString();
+
+  // Key numbers below bottle
+  document.getElementById('bottleNumbers').innerHTML = [
+    {val: completed, lbl: 'Interviewed', cls: 'green'},
+    {val: alive, lbl: 'Alive', cls: ''},
+    {val: A.deceased, lbl: 'Deceased', cls: 'grey'},
+    {val: A.totalG2, lbl: 'Total N', cls: ''},
+  ].map(n =>
+    `<div class="bottle-num ${n.cls}"><div class="val">${n.val.toLocaleString()}</div><div class="lbl">${n.lbl}</div></div>`
+  ).join('');
+
+  // Gold glow at 100%
+  if (pctFloat >= 100) document.getElementById('bottleContainer').classList.add('complete');
+}
+
+// -- Deceased note --
+document.getElementById('deceasedNote').textContent =
+  `Deceased (${A.deceased}) G2s excluded from targets. Deceased status from 2026 tracking informant reports. \u201cNot located\u201d combines G2s classified as \u201cNot Identified\u201d and \u201cNot Reachable\u201d in the tracking data.`;
+
+// -- Tier tables (interviewed by survey location, remaining by tracking location) --
+{
+  // Interviewed table
+  let html = '<thead><tr><th>Survey Location</th><th class="num">Count</th><th class="num">%</th></tr></thead><tbody>';
+  let totI = 0;
+  (A.tiersInterviewed || []).forEach(t => { totI += t.count; });
+  (A.tiersInterviewed || []).forEach(t => {
+    const p = totI > 0 ? (t.count / totI * 100).toFixed(0) : '\u2014';
+    html += `<tr><td>${t.name}</td><td class="num">${t.count}</td><td class="num">${p}%</td></tr>`;
+  });
+  html += `<tr class="total-row"><td>Total interviewed</td><td class="num">${totI}</td><td class="num">100%</td></tr>`;
+  html += '</tbody>';
+  document.getElementById('tierTableInterviewed').innerHTML = html;
+
+  // Remaining table
+  html = '<thead><tr><th>Tracking Location</th><th class="num">Count</th><th class="num">%</th></tr></thead><tbody>';
+  let totR = 0;
+  (A.tiersRemaining || []).forEach(t => { totR += t.count; });
+  (A.tiersRemaining || []).forEach(t => {
+    const p = totR > 0 ? (t.count / totR * 100).toFixed(0) : '\u2014';
+    html += `<tr><td>${t.name}</td><td class="num">${t.count}</td><td class="num">${p}%</td></tr>`;
+  });
+  html += `<tr class="total-row"><td>Total remaining</td><td class="num">${totR}</td><td class="num">100%</td></tr>`;
+  html += `<tr><td colspan="3" style="font-size:0.8rem;color:var(--text-light);padding-top:6px">+ ${A.deceased} deceased + ${A.refused} refused = ${A.totalG2} total G2 targets</td></tr>`;
+  html += '</tbody>';
+  document.getElementById('tierTableRemaining').innerHTML = html;
+}
+
+// -- G3 Progress --
+{
+  const pctWith = B.g3CoResident > 0 ? (B.g3WithG2 / B.g3CoResident * 100).toFixed(0) : 0;
+  const pctWithout = B.g3CoResident > 0 ? (B.g3WithoutG2 / B.g3CoResident * 100).toFixed(0) : 0;
+
+  // Headline
+  document.getElementById('g3Headline').innerHTML =
+    `<div style="display:flex;align-items:baseline;gap:12px">` +
+    `<span style="font-size:2.4rem;font-weight:700;color:var(--blue-dark)">${B.g3CoResident}</span>` +
+    `<span style="font-size:1rem;color:var(--text-light)">G3s interviewed from ${A.hhInterviews} household visits</span>` +
+    `</div>`;
+
+  // Breakdown table: co-residing with G2 vs not, with HH counts
+  const hhPctWith = B.hhWithG3 > 0 ? (B.hhG3WithG2 / B.hhWithG3 * 100).toFixed(0) : 0;
+  const hhPctWithout = B.hhWithG3 > 0 ? (B.hhG3WithoutG2 / B.hhWithG3 * 100).toFixed(0) : 0;
+  let html = '<thead><tr><th></th><th class="num">G3s</th><th class="num">%</th><th class="num">HHs</th><th class="num">%</th></tr></thead><tbody>';
+  html += `<tr><td>Co-residing with a G2</td><td class="num">${B.g3WithG2}</td><td class="num">${pctWith}%</td><td class="num">${B.hhG3WithG2}</td><td class="num">${hhPctWith}%</td></tr>`;
+  html += `<tr><td>Not co-residing with any G2</td><td class="num">${B.g3WithoutG2}</td><td class="num">${pctWithout}%</td><td class="num">${B.hhG3WithoutG2}</td><td class="num">${hhPctWithout}%</td></tr>`;
+  html += `<tr class="total-row"><td>Total</td><td class="num">${B.g3CoResident}</td><td class="num">100%</td><td class="num">${B.hhWithG3}</td><td class="num">100%</td></tr>`;
+  html += '</tbody>';
+  document.getElementById('g3BreakdownTable').innerHTML = html;
+
+  // Location table
+  html = '<thead><tr><th>Survey Location</th><th class="num">G3s</th><th class="num">%</th></tr></thead><tbody>';
+  let tot = 0;
+  (B.locationG3 || []).forEach(t => { tot += t.count; });
+  (B.locationG3 || []).forEach(t => {
+    const p = tot > 0 ? (t.count / tot * 100).toFixed(0) : '\u2014';
+    html += `<tr><td>${t.name}</td><td class="num">${t.count}</td><td class="num">${p}%</td></tr>`;
+  });
+  html += `<tr class="total-row"><td>Total</td><td class="num">${tot}</td><td class="num">100%</td></tr>`;
+  html += '</tbody>';
+  document.getElementById('g3LocationTable').innerHTML = html;
+
+  // Non-resident G3s from chld_fathered
+  const deceased = B.g3FatheredTotal - B.g3FatheredAlive;
+  document.getElementById('g3NonResident').innerHTML =
+    `<h3 style="margin-bottom:12px">Non-resident G3s </h3>` +
+    `<p style="font-size:0.9rem;color:var(--text-light);margin-bottom:12px">G2s reported <strong>${B.g3FatheredTotal}</strong> children not living with them. These G3s have not been interviewed and will need separate household visits.</p>` +
+    `<div style="display:flex;gap:32px">` +
+    `<div><span style="font-size:1.8rem;font-weight:700;color:var(--green-dark)">${B.g3FatheredAlive}</span><div style="font-size:0.75rem;color:var(--text-light);text-transform:uppercase">Alive</div></div>` +
+    `<div><span style="font-size:1.8rem;font-weight:700;color:var(--grey)">${deceased}</span><div style="font-size:0.75rem;color:var(--text-light);text-transform:uppercase">Deceased</div></div>` +
+    `</div>`;
+
+  // G3s per G2 (unconditional, alive only)
+  {
+    document.getElementById('g3PerG2Summary').innerHTML =
+      `<h3 style="margin-bottom:8px">Alive G3 children per interviewed G2</h3>` +
+      `<p style="font-size:0.9rem;color:var(--text-light)"><strong>${B.g3PerG2Total}</strong> total (${B.g3PerG2Roster} on household roster + ${B.g3PerG2Fathered} reported elsewhere)</p>`;
+  }
+
+}
+
+// -- Duration (overall only) --
+{
+  const o = C.overall;
+  const sumHTML = [
+    {lbl: 'P25', val: o.p25 + ' min'},
+    {lbl: 'Median', val: o.median + ' min'},
+    {lbl: 'P75', val: o.p75 + ' min'},
+    {lbl: 'Mean', val: o.mean + ' min'},
+  ].map(s => `<div class="stat"><div class="val">${s.val}</div><div class="lbl">${s.lbl}</div></div>`).join('');
+  document.getElementById('durationSummary').innerHTML = sumHTML;
+  document.getElementById('durationN').textContent = o.n || '';
+}
+
+// -- Not Located note --
+{
+  document.getElementById('notLocatedNote').textContent =
+    `${E.totalNotLocatedAll} G2s were classified as \u201cNot Identified\u201d or \u201cNot Reachable\u201d by tracking informants. Of these, ${E.notLocatedInterviewed} have since been interviewed. Charts below show the remaining ${E.totalNotLocated}.`;
+}
+
+// -- Not Located: Pie charts --
+{
+  Chart.register(ChartDataLabels);
+  const pieColors = ['#2c6faa','#4a9fd8','#81c784','#e8913a','#d64545','#8a8a8a','#e8c840'];
+
+  // Helper: create a pie chart with outer labels connected by leader lines
+  function makeLabeledPie(canvasId, labels, data, colors, title) {
+    const total = data.reduce((s,v) => s + v, 0);
+
+    const leaderPlugin = {
+      id: 'leaders_' + canvasId,
+      afterDatasetDraw(chart) {
+        const meta = chart.getDatasetMeta(0);
+        const {ctx} = chart;
+        meta.data.forEach((arc, i) => {
+          const pct = data[i] / total * 100;
+          if (pct < 5) return;
+          const props = arc.getProps(['x','y','startAngle','endAngle','outerRadius']);
+          const mid = (props.startAngle + props.endAngle) / 2;
+          const r = props.outerRadius;
+          const x1 = props.x + Math.cos(mid) * (r + 2);
+          const y1 = props.y + Math.sin(mid) * (r + 2);
+          const x2 = props.x + Math.cos(mid) * (r + 18);
+          const y2 = props.y + Math.sin(mid) * (r + 18);
+          ctx.save();
+          ctx.strokeStyle = '#aaa';
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+    };
+
+    new Chart(document.getElementById(canvasId), {
+      type: 'pie',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { left: 90, right: 90, top: 10, bottom: 10 } },
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: title, font: { size: 12 }, padding: { bottom: 8 } },
+          tooltip: {
+            callbacks: {
+              label: ctx => `${ctx.label}: ${ctx.raw} (${(ctx.raw/total*100).toFixed(1)}%)`
+            }
+          },
+          datalabels: {
+            display: (ctx) => (ctx.dataset.data[ctx.dataIndex] / total * 100) >= 5,
+            color: '#333',
+            font: { size: 10 },
+            anchor: 'end',
+            align: 'end',
+            offset: 6,
+            clip: false,
+            formatter: (val, ctx) => {
+              const lbl = ctx.chart.data.labels[ctx.dataIndex];
+              const pct = (val / total * 100).toFixed(0);
+              return lbl + ' (' + pct + '%)';
+            }
+          }
+        }
+      },
+      plugins: [leaderPlugin]
+    });
+  }
+
+  // --- Location in 2010 ---
+  const loc = E.location2010.filter(l => l.count > 0);
+  makeLabeledPie(
+    'chartNotLocPie',
+    loc.map(l => l.label),
+    loc.map(l => l.count),
+    pieColors.slice(0, loc.length),
+    `${E.totalNotLocated} G2s not located`
+  );
+
+  // --- Last KHDS contact ---
+  const ls = E.lastSeen;
+  const wave2010 = ls.find(l => l.label === '2010');
+  const wave2004 = ls.find(l => l.label === '2004');
+  const wavesOld = ls.filter(l => l.label !== '2010' && l.label !== '2004');
+  const wavesOldSum = wavesOld.reduce((s,l) => s + l.count, 0);
+
+  const lsLabels = [];
+  const lsData = [];
+  if (wave2010) { lsLabels.push('2010'); lsData.push(wave2010.count); }
+  if (wave2004) { lsLabels.push('2004'); lsData.push(wave2004.count); }
+  if (wavesOldSum > 0) { lsLabels.push('Waves 1\u20134'); lsData.push(wavesOldSum); }
+
+  const lsTotal = lsData.reduce((s,v) => s + v, 0);
+  makeLabeledPie(
+    'chartLastSeen',
+    lsLabels,
+    lsData,
+    ['#2c6faa','#4a9fd8','#e8913a'],
+    `Last KHDS wave (${lsTotal} not located)`
+  );
+}
+</script>
+</body>
+</html>
