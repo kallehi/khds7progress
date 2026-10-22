@@ -303,12 +303,13 @@
   <div class="section">
     <h2>Interview Duration</h2>
     <div class="duration-summary" id="durationSummary"></div>
-    <p class="note">Duration from SurveyCTO active editing time (raw data). Based on <span id="durationN"></span> interviews.</p>
+    <p class="note">Duration from SurveyCTO active editing time (cleaned data). Based on <span id="durationN"></span> consented household interviews.</p>
   </div>
 
 </div>
 
-<script src="khds7_ph1_dashboard_data.js"></script>
+<!-- Load data with a timestamp so browsers never reuse a stale copy after an update -->
+<script>document.write('<script src="khds7_ph1_dashboard_data.js?v=' + Date.now() + '"><\/script>');</script>
 <script>
 const D = window.KHDS7;
 const A = D.sectionA;
@@ -318,7 +319,7 @@ const E = D.sectionE;
 
 // -- Header --
 document.getElementById('header-subtitle').textContent =
-  `Phase 1: ${D.meta.phase1Villages} of ${D.meta.totalVillages} baseline villages  |  Survey period: ${A.surveyDateFirst} to ${A.surveyDateLast}  |  ${A.hhInterviews} household interviews  |  Generated: ${D.meta.generated}`;
+  `Phase 1: ${D.meta.phase1Villages} of ${D.meta.totalVillages} baseline villages  |  Survey period: ${A.surveyDateFirst} to ${A.surveyDateLast}  |  ${A.hhInterviews} consented household interviews  |  Generated: ${D.meta.generated}`;
 
 // -- Key figure cards --
 const aliveG2 = A.aliveNotRefused;
@@ -384,7 +385,7 @@ document.getElementById('key-cards').innerHTML = cardsHTML;
 
 // -- Deceased note --
 document.getElementById('deceasedNote').textContent =
-  `Deceased (${A.deceased}) G2s excluded from targets. Deceased status from 2026 tracking informant reports. \u201cNot located\u201d combines G2s classified as \u201cNot Identified\u201d and \u201cNot Reachable\u201d in the tracking data.`;
+  `G2s count as interviewed if they are listed as current household members in an interviewed household. Deceased (${A.deceased}) G2s excluded from targets. Deceased status from 2026 tracking informant reports. \u201cNot located\u201d combines G2s classified as \u201cNot Identified\u201d and \u201cNot Reachable\u201d in the tracking data.`;
 
 // -- Tier tables (interviewed by survey location, remaining by tracking location) --
 {
