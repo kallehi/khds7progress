@@ -325,6 +325,7 @@ document.getElementById('header-subtitle').textContent =
 const aliveG2 = A.aliveNotRefused;
 const pct = (A.interviewed / aliveG2 * 100).toFixed(0);
 const cardsHTML = [
+  {label: 'Households Interviewed', value: A.hhInterviews, detail: (A.hhInterviewsY1 !== undefined ? `Y1: ${A.hhInterviewsY1} · Y2: ${A.hhInterviewsY2} (consented)` : 'Consented interviews')},
   {label: 'G2 Targets (alive)', value: aliveG2, detail: `${A.totalG2} total \u2212 ${A.deceased} deceased`},
   {label: 'G2 Interviewed', value: A.interviewed, detail: `${pct}% of alive targets`, cls: 'green'},
   {label: 'G2 Remaining', value: A.remaining, detail: 'For tracking stage', cls: 'orange'},
