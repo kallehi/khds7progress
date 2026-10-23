@@ -279,7 +279,7 @@
   <!-- G3 Progress -->
   <div class="section">
     <h2>G3 Progress</h2>
-    <p class="note" style="margin-top:-12px;margin-bottom:16px">Target N unknown &mdash; G3s are identified through G2 household interviews</p>
+    <p class="note" style="margin-top:-12px;margin-bottom:16px">No fixed target &mdash; the G3 total is a moving target, built up from G2s' reports of their children (children module) and from tracking</p>
 
     <!-- Interviewed G3s -->
     <div id="g3Headline" style="margin-bottom:16px"></div>
@@ -292,7 +292,7 @@
       <div id="g3NonResident"></div>
     </div>
 
-    <!-- G3s per G2 parent -->
+    <!-- All known Phase 1 G3s (unique by PID) -->
     <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--grey-border)">
       <div id="g3PerG2Summary"></div>
     </div>
@@ -432,8 +432,8 @@ document.getElementById('deceasedNote').textContent =
   const hhPctWith = B.hhWithG3 > 0 ? (B.hhG3WithG2 / B.hhWithG3 * 100).toFixed(0) : 0;
   const hhPctWithout = B.hhWithG3 > 0 ? (B.hhG3WithoutG2 / B.hhWithG3 * 100).toFixed(0) : 0;
   let html = '<thead><tr><th></th><th class="num">G3s</th><th class="num">%</th><th class="num">HHs</th><th class="num">%</th></tr></thead><tbody>';
-  html += `<tr><td>Co-residing with a G2</td><td class="num">${B.g3WithG2}</td><td class="num">${pctWith}%</td><td class="num">${B.hhG3WithG2}</td><td class="num">${hhPctWith}%</td></tr>`;
-  html += `<tr><td>Not co-residing with any G2</td><td class="num">${B.g3WithoutG2}</td><td class="num">${pctWithout}%</td><td class="num">${B.hhG3WithoutG2}</td><td class="num">${hhPctWithout}%</td></tr>`;
+  html += `<tr><td>In a household with a G2 member (not necessarily a parent)</td><td class="num">${B.g3WithG2}</td><td class="num">${pctWith}%</td><td class="num">${B.hhG3WithG2}</td><td class="num">${hhPctWith}%</td></tr>`;
+  html += `<tr><td>In a household with no G2 member (e.g., with grandparents)</td><td class="num">${B.g3WithoutG2}</td><td class="num">${pctWithout}%</td><td class="num">${B.hhG3WithoutG2}</td><td class="num">${hhPctWithout}%</td></tr>`;
   html += `<tr class="total-row"><td>Total</td><td class="num">${B.g3CoResident}</td><td class="num">100%</td><td class="num">${B.hhWithG3}</td><td class="num">100%</td></tr>`;
   html += '</tbody>';
   document.getElementById('g3BreakdownTable').innerHTML = html;
@@ -453,18 +453,30 @@ document.getElementById('deceasedNote').textContent =
   // Non-resident G3s from chld_fathered
   const deceased = B.g3FatheredTotal - B.g3FatheredAlive;
   document.getElementById('g3NonResident').innerHTML =
-    `<h3 style="margin-bottom:12px">Non-resident G3s </h3>` +
-    `<p style="font-size:0.9rem;color:var(--text-light);margin-bottom:12px">G2s reported <strong>${B.g3FatheredTotal}</strong> children not living with them. These G3s have not been interviewed and will need separate household visits.</p>` +
+    `<h3 style="margin-bottom:12px">G3s reported by G2s as living elsewhere</h3>` +
+    `<p style="font-size:0.9rem;color:var(--text-light);margin-bottom:12px">In the children module, interviewed G2s reported <strong>${B.g3FatheredTotal}</strong> children who do not live with them. This is a different list from the G3s counted above. Most have not yet been interviewed and will need separate household visits. Some may already live in an interviewed household (e.g., with grandparents) and so also appear above; the two lists cannot yet be linked.</p>` +
     `<div style="display:flex;gap:32px">` +
     `<div><span style="font-size:1.8rem;font-weight:700;color:var(--green-dark)">${B.g3FatheredAlive}</span><div style="font-size:0.75rem;color:var(--text-light);text-transform:uppercase">Alive</div></div>` +
     `<div><span style="font-size:1.8rem;font-weight:700;color:var(--grey)">${deceased}</span><div style="font-size:0.75rem;color:var(--text-light);text-transform:uppercase">Deceased</div></div>` +
     `</div>`;
 
-  // G3s per G2 (unconditional, alive only)
+  // All known Phase 1 G3s, unique by PID (roster + children module + lookup + tracking)
   {
-    document.getElementById('g3PerG2Summary').innerHTML =
-      `<h3 style="margin-bottom:8px">Alive G3 children per interviewed G2</h3>` +
-      `<p style="font-size:0.9rem;color:var(--text-light)"><strong>${B.g3PerG2Total}</strong> total (${B.g3PerG2Roster} on household roster + ${B.g3PerG2Fathered} reported elsewhere)</p>`;
+    const U = B.universe || {};
+    const alive = U.intWithG2 + U.intNoG2 + U.notYet;
+    const pa = n => alive > 0 ? (n / alive * 100).toFixed(0) + '%' : '—';
+    let h = `<h3 style="margin-bottom:8px">All known Phase 1 G3s</h3>` +
+      `<p style="font-size:0.9rem;color:var(--text-light);margin-bottom:12px">Combines household rosters, the children module, the lookup file and tracking; each person is counted once (by PID). G3s reported as living elsewhere who were later found on another interviewed household's roster are counted as interviewed (${U.intReportedElsewhere}).</p>` +
+      '<table style="max-width:600px"><thead><tr><th></th><th class="num">G3s</th><th class="num">% of alive</th></tr></thead><tbody>';
+    h += `<tr><td>Interviewed: in a household with a G2 member</td><td class="num">${U.intWithG2}</td><td class="num">${pa(U.intWithG2)}</td></tr>`;
+    h += `<tr><td>Interviewed: in a household with no G2 member</td><td class="num">${U.intNoG2}</td><td class="num">${pa(U.intNoG2)}</td></tr>`;
+    h += `<tr><td>Not yet interviewed</td><td class="num">${U.notYet}</td><td class="num">${pa(U.notYet)}</td></tr>`;
+    h += `<tr class="total-row"><td>Total alive</td><td class="num">${alive}</td><td class="num">100%</td></tr>`;
+    h += `<tr><td>Deceased</td><td class="num">${U.deceased}</td><td class="num"></td></tr>`;
+    h += `<tr class="total-row"><td>Total known</td><td class="num">${U.total}</td><td class="num"></td></tr>`;
+    h += '</tbody></table>' +
+      `<p class="note" style="margin-top:8px">Not yet interviewed: ${U.notYetChildModOnly} reported by a G2 only, ${U.notYetLookupOnly} in the lookup only, ${U.notYetBoth} in both. Provisional: members of the 53 households missing from the roster file are not yet counted as interviewed, and tracking status dates from May 2026.</p>`;
+    document.getElementById('g3PerG2Summary').innerHTML = h;
   }
 
 }
