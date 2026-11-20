@@ -6,6 +6,7 @@
 <title>KHDS7 Phase 1 — Survey Progress Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
   :root {
     --blue-dark: #1b3a5c;
@@ -153,6 +154,34 @@
   .bottle-num.grey .val { color: var(--grey); }
   .bottle-container.complete .bottle-pct { color: #b89a2a; }
   .bottle-container.complete svg { filter: drop-shadow(0 0 10px rgba(245,215,110,0.4)); }
+
+  /* District map */
+  .map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 768px) { .map-grid { grid-template-columns: 1fr; } }
+  .map-panel { margin: 0; }
+  .map-panel figcaption { font-size: 0.85rem; font-weight: 600; color: var(--text-light); margin-bottom: 6px; }
+  .map-panel svg { width: 100%; height: auto; display: block; background: #fcfcfb; border: 1px solid var(--grey-border); border-radius: 6px; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 0.8rem; color: var(--text); margin-bottom: 12px; }
+  .map-legend .ttl { font-weight: 600; color: var(--text-light); margin-right: 4px; }
+  .map-legend .key { display: inline-flex; align-items: center; gap: 6px; }
+  .map-legend .sw { width: 22px; height: 12px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.08); }
+  .map-unit { stroke: #ffffff; stroke-width: 0.6; vector-effect: non-scaling-stroke; cursor: default; }
+  .map-unit:hover, .map-unit.hl { stroke: var(--text); stroke-width: 2; }
+  .map-lake { fill: #d7e6f1; stroke: #b4cbdd; stroke-width: 0.6; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .map-region { fill: none; stroke: #4a5866; stroke-width: 1.3; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .map-label { font-size: 10px; fill: var(--text); text-anchor: middle; pointer-events: none;
+               paint-order: stroke; stroke: #ffffff; stroke-width: 3px; stroke-linejoin: round; }
+  .map-label.region { font-weight: 600; letter-spacing: 0.3px; }
+  .map-label.district { font-size: 9px; fill: #3d4b59; }
+  .map-label.on-dark { fill: #ffffff; stroke: #0d366b; }
+  .map-tip { position: fixed; pointer-events: none; background: #ffffff; border: 1px solid var(--grey-border);
+             border-radius: 6px; padding: 8px 10px; font-size: 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+             opacity: 0; transition: opacity 0.1s; z-index: 10; max-width: 260px; }
+  .map-tip .t { font-weight: 600; }
+  .map-tip .v { font-variant-numeric: tabular-nums; }
+  .map-table { margin-top: 14px; font-size: 0.85rem; }
+  .map-table summary { cursor: pointer; color: var(--blue-mid); font-weight: 600; }
+  .map-table table { max-width: 600px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -256,6 +285,29 @@
     <p class="note" id="deceasedNote"></p>
   </div>
 
+  <!-- Household map -->
+  <div class="section">
+    <h2>Interviewed Households by District</h2>
+    <p class="note" id="mapIntro" style="margin-top:-12px;margin-bottom:12px"></p>
+    <div class="map-legend" id="mapLegend" aria-label="Legend: households per district"></div>
+    <div class="map-grid">
+      <figure class="map-panel">
+        <figcaption>Tanzania</figcaption>
+        <svg id="mapTz" role="img" aria-label="Map of Tanzania: interviewed households by district"></svg>
+      </figure>
+      <figure class="map-panel">
+        <figcaption>Lake Zone detail (Kagera, Geita, Mwanza)</figcaption>
+        <svg id="mapLake" role="img" aria-label="Map of Kagera, Geita and Mwanza: interviewed households by district"></svg>
+      </figure>
+    </div>
+    <div class="map-tip" id="mapTip" role="status" aria-live="polite"></div>
+    <details class="map-table">
+      <summary>Table: households by district</summary>
+      <table id="mapTable"></table>
+    </details>
+    <p class="note" id="mapNote"></p>
+  </div>
+
   <!-- Not Located -->
   <div class="section">
     <h2>"Not Located" G2s &mdash; Reference</h2>
@@ -310,6 +362,7 @@
 
 <!-- Load data with a timestamp so browsers never reuse a stale copy after an update -->
 <script>document.write('<script src="khds7_ph1_dashboard_data.js?v=' + Date.now() + '"><\/script>');</script>
+<script>document.write('<script src="khds7_ph1_map_geo.js?v=' + Date.now() + '"><\/script>');</script>
 <script>
 const D = window.KHDS7;
 const A = D.sectionA;
@@ -611,6 +664,136 @@ document.getElementById('deceasedNote').textContent =
     `Last KHDS wave (${lsTotal} not located)`
   );
 }
+</script>
+<script>
+// -- District map: consented household interviews by district ---------------
+(function () {
+  const G = window.KHDS7_GEO;
+  const D = window.KHDS7;
+  const intro = document.getElementById('mapIntro');
+  if (!G || !D || !D.districtHH || !window.d3) {
+    intro.textContent = 'Map unavailable (map data or library not loaded).';
+    return;
+  }
+
+  // Classes (one blue hue, light -> dark); counts below 5 shown only as a class
+  const BINS = [
+    {min: 1,   max: 4,        label: '1–4',   col: '#86b6ef', dark: false},
+    {min: 5,   max: 19,       label: '5–19',  col: '#5598e7', dark: false},
+    {min: 20,  max: 49,       label: '20–49', col: '#2a78d6', dark: true},
+    {min: 50,  max: 99,       label: '50–99', col: '#1c5cab', dark: true},
+    {min: 100, max: Infinity, label: '100+',       col: '#0d366b', dark: true},
+  ];
+  const NONE = '#e9ecef';
+  const binOf = n => BINS.find(b => n >= b.min && n <= b.max);
+  // Districts with fewer than 5 households carry small: 1 instead of n (the
+  // exact count is not published). A unit's value is the sum of its exact
+  // counts; its colour uses that sum, or the 1-4 class if it has only small ones.
+  const val = p => p.n > 0 ? p.n : (p.small > 0 ? 1 : 0);
+  const shown = p => p.n === 0 && p.small === 0 ? 'No interviews'
+    : p.n === 0 ? '1–4 households'
+    : `${p.n.toLocaleString()}${p.small ? '+' : ''} households`;
+  const shortN = p => p.n === 0 ? '1–4' : `${p.n.toLocaleString()}${p.small ? '+' : ''}`;
+
+  // Counts per map unit (a unit can cover more than one survey district)
+  const rec = new Map(D.districtHH.map(d => [d.code, d]));
+  const units = G.units.features;
+  units.forEach(f => {
+    const ds = f.properties.codes.map(c => rec.get(c)).filter(Boolean);
+    f.properties.n = d3.sum(ds, d => d.n || 0);
+    f.properties.small = ds.filter(d => d.small).length;
+  });
+  const total = D.districtHHTotal;
+  const known = new Set(units.flatMap(f => f.properties.codes));
+  const unmapped = D.districtHH.filter(d => !known.has(d.code)).length;
+  const withHH = units.filter(f => val(f.properties) > 0).length;
+  const unitName = p => p.covers.length ? `${p.name} (incl. ${p.covers.join(', ')})` : p.name;
+
+  intro.textContent = `${total.toLocaleString()} consented household interviews in ${withHH} districts, by the district where the household was interviewed.`;
+
+  // Legend
+  document.getElementById('mapLegend').innerHTML =
+    '<span class="ttl">Households per district</span>' +
+    BINS.map(b => `<span class="key"><span class="sw" style="background:${b.col}"></span>${b.label}</span>`).join('') +
+    `<span class="key"><span class="sw" style="background:${NONE}"></span>None</span>`;
+
+  // Tooltip
+  const tip = document.getElementById('mapTip');
+  function showTip(ev, p) {
+    tip.innerHTML = `<div class="t">${unitName(p)}</div><div>${p.region} region</div><div class="v">${shown(p)}</div>`;
+    const x = Math.min(ev.clientX + 14, window.innerWidth - 270);
+    tip.style.left = x + 'px';
+    tip.style.top = (ev.clientY + 14) + 'px';
+    tip.style.opacity = 1;
+  }
+  const hideTip = () => { tip.style.opacity = 0; };
+
+  // Planar projection of lon/lat (no ring-winding issues; Tanzania spans
+  // about 1-12 S, so the distortion is negligible at this scale)
+  function draw(svgId, focus, opts) {
+    const W = 560, H = opts.H;
+    const svg = d3.select('#' + svgId).attr('viewBox', `0 0 ${W} ${H}`);
+    const proj = d3.geoIdentity().reflectY(true)
+      .fitExtent([[opts.pad, opts.pad], [W - opts.pad, H - opts.pad]], {type: 'FeatureCollection', features: focus});
+    const path = d3.geoPath(proj);
+    const clipId = svgId + '-clip';
+    svg.append('clipPath').attr('id', clipId).append('rect').attr('width', W).attr('height', H);
+    const g = svg.append('g').attr('clip-path', `url(#${clipId})`);
+
+    g.selectAll('path.map-unit').data(units).join('path')
+      .attr('class', 'map-unit')
+      .attr('d', path)
+      .attr('fill', f => val(f.properties) > 0 ? binOf(val(f.properties)).col : NONE)
+      .on('mousemove', (ev, f) => showTip(ev, f.properties))
+      .on('mouseleave', hideTip);
+
+    if (G.lakes) {
+      g.selectAll('path.map-lake').data(G.lakes.features).join('path')
+        .attr('class', 'map-lake').attr('d', path);
+    }
+
+    g.selectAll('path.map-region').data(G.regions.features).join('path')
+      .attr('class', 'map-region').attr('d', path);
+
+    // Region labels (mainland regions + Zanzibar)
+    const inView = ([x, y]) => x > 20 && x < W - 20 && y > 12 && y < H - 8;
+    g.selectAll('text.region').data(G.labels.filter(l => inView(proj([l.lon, l.lat])))).join('text')
+      .attr('class', 'map-label region')
+      .attr('x', l => proj([l.lon, l.lat])[0])
+      .attr('y', l => proj([l.lon, l.lat])[1])
+      .attr('font-size', opts.regionFont)
+      .text(l => l.name);
+
+    // District labels (detail panel only): districts with 5+ households
+    if (opts.districtLabels) {
+      const lab = units.filter(f => f.properties.n >= 5 && opts.regions.includes(f.properties.region));
+      g.selectAll('text.district').data(lab).join('text')
+        .attr('class', f => 'map-label district' + (binOf(val(f.properties)).dark ? ' on-dark' : ''))
+        .attr('x', f => path.centroid(f)[0])
+        .attr('y', f => path.centroid(f)[1] + 12)
+        .text(f => f.properties.name);
+    }
+  }
+
+  draw('mapTz', units, {H: 560, pad: 8, regionFont: 10, districtLabels: false});
+  const LAKE = ['Kagera', 'Geita', 'Mwanza'];
+  draw('mapLake', units.filter(f => LAKE.includes(f.properties.region)),
+       {H: 560, pad: 22, regionFont: 12, districtLabels: true, regions: LAKE});
+
+  // Table view (all districts with interviews; counts below 5 as 1-4)
+  const rows = units.filter(f => val(f.properties) > 0)
+    .sort((a, b) => val(b.properties) - val(a.properties) || d3.ascending(a.properties.name, b.properties.name));
+  document.getElementById('mapTable').innerHTML =
+    '<tr><th>District</th><th>Region</th><th class="num">Households</th></tr>' +
+    rows.map(f => `<tr><td>${unitName(f.properties)}</td><td>${f.properties.region}</td><td class="num">${shortN(f.properties)}</td></tr>`).join('') +
+    `<tr class="total-row"><td>Total</td><td></td><td class="num">${total.toLocaleString()}</td></tr>`;
+
+  document.getElementById('mapNote').textContent =
+    'District = where the household was interviewed (survey district list). Kinondoni includes Ubungo and Temeke includes Kigamboni, ' +
+    'which are not separate in the boundary file. Counts below 5 are shown only as 1–4. ' +
+    (unmapped ? `${unmapped} district(s) in the data could not be placed on the map. ` : '') +
+    G.source + '.';
+})();
 </script>
 </body>
 </html>
