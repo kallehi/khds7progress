@@ -154,6 +154,29 @@
   .bottle-num.grey .val { color: var(--grey); }
   .bottle-container.complete .bottle-pct { color: #b89a2a; }
   .bottle-container.complete svg { filter: drop-shadow(0 0 10px rgba(245,215,110,0.4)); }
+  /* Cork pop at the target rate */
+  .bottle-container svg { overflow: visible; cursor: default; }
+  .bottle-container.complete svg { cursor: pointer; }
+  #cork { transform-box: fill-box; transform-origin: center; }
+  .bottle-container.popped #cork { animation: corkPop 1.3s cubic-bezier(.2,.75,.3,1) forwards; }
+  @keyframes corkPop {
+    0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+    12%  { transform: translate(0, -6px) rotate(-6deg); opacity: 1; }
+    100% { transform: translate(70px, -190px) rotate(320deg); opacity: 0; }
+  }
+  .foam circle { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .bottle-container.popped .foam circle { animation: foam 1.5s ease-out forwards; }
+  .bottle-container.popped .foam circle:nth-child(even) { animation-delay: 0.08s; }
+  @keyframes foam {
+    0%   { opacity: 0.95; transform: translate(0, 0) scale(0.5); }
+    100% { opacity: 0;    transform: translate(var(--dx), var(--dy)) scale(1.5); }
+  }
+  .bottle-target { font-size: 0.72rem; color: var(--text-light); }
+  .bottle-container.complete .bottle-target { color: #b89a2a; font-weight: 600; }
+  @media (prefers-reduced-motion: reduce) {
+    .bottle-container.popped #cork { animation: none; opacity: 0; }
+    .bottle-container.popped .foam circle { animation: none; }
+  }
 
   /* District map */
   .map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
@@ -263,15 +286,32 @@
           </g></g>
           <!-- Glass highlight -->
           <path d="M 68 210 L 68 420 Q 68 440 78 448" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4" stroke-linecap="round"/>
-          <!-- Foil cap -->
-          <rect x="84" y="4" width="32" height="20" rx="3" fill="url(#foilGrad)" stroke="#9a8520" stroke-width="0.5"/>
-          <line x1="84" y1="14" x2="116" y2="14" stroke="#9a8520" stroke-width="0.5" opacity="0.6"/>
-          <rect x="82" y="22" width="36" height="8" rx="2" fill="url(#foilGrad)" stroke="#9a8520" stroke-width="0.5" opacity="0.85"/>
+          <!-- Target line (85%): y = 456 - 0.85 * 311 -->
+          <line id="targetLine" x1="62" y1="191.6" x2="138" y2="191.6" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.75"/>
+          <text id="targetLabel" x="146" y="195" font-size="16" fill="#6b7c8d">85%</text>
+          <!-- Foam spray (shown when the cork pops) -->
+          <g class="foam">
+            <circle cx="100" cy="8" r="5" fill="#fff6d0" style="--dx:-26px;--dy:-60px"/>
+            <circle cx="100" cy="8" r="4" fill="#f5e7a8" style="--dx:-10px;--dy:-80px"/>
+            <circle cx="100" cy="8" r="6" fill="#fffbe8" style="--dx:4px;--dy:-90px"/>
+            <circle cx="100" cy="8" r="4" fill="#f5e7a8" style="--dx:18px;--dy:-72px"/>
+            <circle cx="100" cy="8" r="5" fill="#fff6d0" style="--dx:30px;--dy:-52px"/>
+            <circle cx="100" cy="8" r="3" fill="#ffffff" style="--dx:-36px;--dy:-34px"/>
+            <circle cx="100" cy="8" r="3" fill="#ffffff" style="--dx:38px;--dy:-30px"/>
+            <circle cx="100" cy="8" r="2.5" fill="#f0d860" style="--dx:-4px;--dy:-110px"/>
+          </g>
+          <!-- Foil cap / cork -->
+          <g id="cork">
+            <rect x="84" y="4" width="32" height="20" rx="3" fill="url(#foilGrad)" stroke="#9a8520" stroke-width="0.5"/>
+            <line x1="84" y1="14" x2="116" y2="14" stroke="#9a8520" stroke-width="0.5" opacity="0.6"/>
+            <rect x="82" y="22" width="36" height="8" rx="2" fill="url(#foilGrad)" stroke="#9a8520" stroke-width="0.5" opacity="0.85"/>
+          </g>
         </svg>
         <div style="text-align:center">
           <div class="bottle-pct" id="bottlePct"></div>
           <div class="bottle-count" id="bottleCount"></div>
           <div class="bottle-label">G2 interviews completed</div>
+          <div class="bottle-target" id="bottleTarget"></div>
         </div>
         <div class="bottle-numbers" id="bottleNumbers"></div>
       </div>
@@ -398,6 +438,19 @@ document.getElementById('key-cards').innerHTML = cardsHTML;
   const pctFloat = alive > 0 ? (completed / alive * 100) : 0;
   const fillFrac = Math.min(pctFloat / 100, 1);
 
+  // Target rate: the cork pops (and the bottle turns gold) at or above it
+  const POP_AT = 85;
+  const bottleBox = document.getElementById('bottleContainer');
+  function popCork() {
+    bottleBox.classList.add('complete');
+    bottleBox.classList.remove('popped');
+    void bottleBox.offsetWidth;            // restart the animation on replay
+    bottleBox.classList.add('popped');
+  }
+  bottleBox.querySelector('svg').addEventListener('click', () => { if (pctFloat >= POP_AT) popCork(); });
+  document.getElementById('bottleTarget').textContent = pctFloat >= POP_AT
+    ? `Target of ${POP_AT}% reached!` : `Target: ${POP_AT}% (${Math.max(0, Math.ceil(POP_AT / 100 * alive) - completed)} more interviews)`;
+
   // Fillable range: y=145 (top of interior) to y=456 (bottom) = 311 SVG units
   const FILL_BOT = 456, FILL_RANGE = 311;
   const targetH = fillFrac * FILL_RANGE;
@@ -417,6 +470,7 @@ document.getElementById('key-cards').innerHTML = cardsHTML;
     bClip.setAttribute('y', y);
     bClip.setAttribute('height', h);
     if (t < 1) requestAnimationFrame(animFill);
+    else if (pctFloat >= POP_AT) popCork();
   }
   setTimeout(() => requestAnimationFrame(animFill), 300);
 
@@ -436,7 +490,7 @@ document.getElementById('key-cards').innerHTML = cardsHTML;
   ).join('');
 
   // Gold glow at 100%
-  if (pctFloat >= 100) document.getElementById('bottleContainer').classList.add('complete');
+  // (gold colour and glow are added by popCork() at the target rate)
 }
 
 // -- Deceased note --
