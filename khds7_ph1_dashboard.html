@@ -278,7 +278,7 @@
       <div>
         <h3>Interviewed &mdash; by actual survey location</h3>
         <table id="tierTableInterviewed"></table>
-        <h3 style="margin-top:20px">Remaining &mdash; by tracking location</h3>
+        <h3 style="margin-top:20px">Not yet interviewed &mdash; what we know</h3>
         <table id="tierTableRemaining"></table>
       </div>
     </div>
@@ -375,14 +375,16 @@ document.getElementById('header-subtitle').textContent =
   `Phase 1: ${D.meta.phase1Villages} of ${D.meta.totalVillages} baseline villages  |  Survey period: ${A.surveyDateFirst} to ${A.surveyDateLast}  |  ${A.hhInterviews} consented household interviews  |  Generated: ${D.meta.generated}`;
 
 // -- Key figure cards --
+const d3sum = (arr, k) => arr.reduce((t, x) => t + (x[k] || 0), 0);
+const NI = A.notInterviewed;
+const NIg = k => NI.groups.find(g => g.key === k);
 const aliveG2 = A.aliveNotRefused;
-const pct = (A.interviewed / aliveG2 * 100).toFixed(0);
+const pct = (A.interviewed / aliveG2 * 100).toFixed(1);
 const cardsHTML = [
   {label: 'Households Interviewed', value: A.hhInterviews, detail: (A.hhInterviewsY1 !== undefined ? `Y1: ${A.hhInterviewsY1} · Y2: ${A.hhInterviewsY2} (consented)` : 'Consented interviews')},
   {label: 'G2 Targets (alive)', value: aliveG2, detail: `${A.totalG2} total \u2212 ${A.deceased} deceased`},
   {label: 'G2 Interviewed', value: A.interviewed, detail: `${pct}% of alive targets`, cls: 'green'},
-  {label: 'G2 Remaining', value: A.remaining, detail: 'For tracking stage', cls: 'orange'},
-  {label: 'G2 Refused', value: A.refused, detail: 'From tracking informants', cls: 'red'},
+  {label: 'G2 Remaining', value: NI ? NI.total - NIg('D').n : A.remaining, detail: NI ? `Not yet interviewed; plus ${NIg('D').n} refused` : 'For tracking stage', cls: 'orange'},
   {label: 'G3s Interviewed', value: (B.g3CoResident || 0), detail: `${B.g3WithoutG2 || 0} not co-residing with G2`},
 ].map(c =>
   `<div class="card ${c.cls||''}"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="detail">${c.detail}</div></div>`
@@ -455,17 +457,32 @@ document.getElementById('deceasedNote').textContent =
   html += '</tbody>';
   document.getElementById('tierTableInterviewed').innerHTML = html;
 
-  // Remaining table
-  html = '<thead><tr><th>Tracking Location</th><th class="num">Count</th><th class="num">%</th></tr></thead><tbody>';
-  let totR = 0;
-  (A.tiersRemaining || []).forEach(t => { totR += t.count; });
-  (A.tiersRemaining || []).forEach(t => {
-    const p = totR > 0 ? (t.count / totR * 100).toFixed(0) : '\u2014';
-    html += `<tr><td>${t.name}</td><td class="num">${t.count}</td><td class="num">${p}%</td></tr>`;
-  });
-  html += `<tr class="total-row"><td>Total remaining</td><td class="num">${totR}</td><td class="num">100%</td></tr>`;
-  html += `<tr><td colspan="3" style="font-size:0.8rem;color:var(--text-light);padding-top:6px">+ ${A.deceased} deceased + ${A.refused} refused = ${A.totalG2} total G2 targets</td></tr>`;
-  html += '</tbody>';
+  // Not-yet-interviewed table: groups A-D with last KHDS contact
+  if (NI) {
+    html = '<thead><tr><th>Group</th><th class="num">Count</th><th class="num">%</th>' +
+           '<th class="num" style="white-space:nowrap">Last seen 2010</th><th class="num">2004</th><th class="num" style="white-space:nowrap">1991–94</th></tr></thead><tbody>';
+    NI.groups.forEach(g => {
+      const p = NI.total > 0 ? (g.n / NI.total * 100).toFixed(0) : '—';
+      html += `<tr><td><b>${g.key}.</b> ${g.name}<div style="font-size:0.75rem;color:var(--text-light)">${g.detail}</div></td>` +
+              `<td class="num">${g.n}</td><td class="num">${p}%</td>` +
+              `<td class="num">${g.ls2010}</td><td class="num">${g.ls2004}</td><td class="num">${g.ls9194}</td></tr>`;
+    });
+    const s10 = d3sum(NI.groups, 'ls2010'), s04 = d3sum(NI.groups, 'ls2004'), s91 = d3sum(NI.groups, 'ls9194');
+    html += `<tr class="total-row"><td>Total not yet interviewed</td><td class="num">${NI.total}</td><td class="num">100%</td>` +
+            `<td class="num">${s10}</td><td class="num">${s04}</td><td class="num">${s91}</td></tr>`;
+    html += `<tr><td colspan="6" style="font-size:0.8rem;color:var(--text-light);padding-top:6px">+ ${A.interviewed} interviewed + ${A.deceased} deceased = ${A.totalG2} total G2 targets. ` +
+            `Refusals stay in the tracking-rate denominator. A household refusal may not be the G2’s own decision, and the dynasty roster keeps one answer per person.</td></tr>`;
+    html += '</tbody>';
+  } else {
+    html = '<thead><tr><th>Tracking Location</th><th class="num">Count</th><th class="num">%</th></tr></thead><tbody>';
+    let totR = 0;
+    (A.tiersRemaining || []).forEach(t => { totR += t.count; });
+    (A.tiersRemaining || []).forEach(t => {
+      const p = totR > 0 ? (t.count / totR * 100).toFixed(0) : '—';
+      html += `<tr><td>${t.name}</td><td class="num">${t.count}</td><td class="num">${p}%</td></tr>`;
+    });
+    html += `<tr class="total-row"><td>Total remaining</td><td class="num">${totR}</td><td class="num">100%</td></tr></tbody>`;
+  }
   document.getElementById('tierTableRemaining').innerHTML = html;
 }
 
